@@ -7,36 +7,36 @@
 # keys and different numbers, which is the whole point: the node never changes.
 
 image_topic: "camera_node/image/compressed"
-
-img_size: [640, 480]  # TODO
-top_cutoff: 0.0       # TODO
+ 
+img_size: [640, 480]
+top_cutoff: 0.45       
 
 colors:
   WHITE:
-    low:  [0, 0, 0]        # TODO
-    high: [180, 255, 255]  # TODO
-
+    low:  [70, 40, 110]
+    high: [130, 150, 250]
+ 
   YELLOW:
-    low:  [0, 0, 0]        # TODO
-    high: [180, 255, 255]  # TODO
-
+    low:  [15, 60, 80]
+    high: [60, 220, 220]
+ 
   RED:
-    low_1:  [0, 0, 0]        # TODO
-    high_1: [180, 255, 255]  # TODO
-    low_2:  [0, 0, 0]        # TODO
-    high_2: [180, 255, 255]  # TODO
-
-dilation_kernel_size: 1  # TODO
-erode_iterations: 0      # TODO
-dilate_iterations: 0     # TODO
-
-canny_thresholds: [0, 255]  # TODO
+    low_1:  [150, 50, 100]
+    high_1: [179, 200, 255]
+    low_2:  [0, 0, 0]
+    high_2: [10, 20, 60]
+ 
+dilation_kernel_size: 3
+erode_iterations: 2
+dilate_iterations: 4     # allow mask to reach canny edges
+ 
+canny_thresholds: [60, 120]
 canny_aperture_size: 3
 hough:
-  threshold: 1        # TODO
-  min_line_length: 1  # TODO
-  max_line_gap: 1     # TODO
-
+  threshold: 15
+  min_line_length: 15
+  max_line_gap: 8
+ 
 normal_probe_px: 2
 
 # Leave this false.
