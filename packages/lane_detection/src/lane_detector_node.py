@@ -81,7 +81,7 @@ class LaneDetectorNode:
         self.bridge = CvBridge()
 
         # TODO (Part II): segment publisher
-        self.pub_segments = None
+        self.pub_segments = rospy.Publisher("~segments", SegmentList, queue_size=1)
 
         # Debug views, rendered only when something is subscribed.
         self.pub_cropped = rospy.Publisher("~image_cropped", Image, queue_size=1)
@@ -97,9 +97,10 @@ class LaneDetectorNode:
         self.pub_lines_all = rospy.Publisher("~image_lines_all", Image, queue_size=1)
 
         # TODO (Part II): image subscriber
-        self.sub_image = None
+        self.sub_image = rospy.Subscriber(self.image_topic, CompressedImage, self.image_cb, queue_size=1)
 
         # TODO (Part II): a rospy.Timer that re-runs get_params every 10 s
+        rospy.Timer(rospy.Duration(10), self.get_params)
 
         # We replaced Duckietown's line detector, so we answer its switch
         # service in its place.
@@ -149,19 +150,64 @@ class LaneDetectorNode:
 
         # TODO (Part II): resize to (self.img_w, self.img_h), THEN slice off
         # the top self.cutoff_rows rows. That order matters!
-        cropped = None
+
+        # Resize
+        img_size = (self.img_w, self.img_h)
+        original_size = bgr.shape[1], bgr.shape[0]
+        if original_size != img_size:
+            print(f"resizing {original_size} -> {img_size}")
+            small = cv2.resize(bgr, img_size, interpolation=cv2.INTER_AREA)
+        else:
+            small = bgr
+
+        # Crop
+        CUTOFF_ROWS = int(self.top_cutoff * small.shape[0])
+        cropped = small[CUTOFF_ROWS:]
 
         # TODO (Part II): BGR to HSV.
-        hsv = None
+        hsv = cv2.cvtColor(cropped, cv2.COLOR_BGR2HSV)
+
 
         # TODO (Part II): a cleaned mask per color. self.colors maps name ->
         # ColorRange; erode then dilate with self.kernel and the iteration
         # counts from the param file. The dilation is what makes the mask reach
         # the Canny edges on its boundary.
-        masks = {}
+        
+        mask_red_1 = cv2.inRange(hsv, self.colors["RED"].low_1, self.colors["RED"].high_1)
+        mask_red_2 = cv2.inRange(hsv, self.colors["RED"].low_2, self.colors["RED"].high_2)
+
+        mask_white  = cv2.inRange(hsv, self.colors["WHITE"].low,  self.colors["WHITE"].high)
+        mask_yellow = cv2.inRange(hsv, self.colors["YELLOW"].low, self.colors["YELLOW"].high)
+        mask_red    = cv2.bitwise_or(mask_red_1, mask_red_2)
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation_kernel_size, self.dilation_kernel_size))
+
+        def clean(mask):
+            # TODO: erode to drop speckle, then dilate. Remember the second reason for
+            # the dilation - the mask has to reach out over the Canny edges you find in
+            # section 6.
+            m = mask          # TODO: cv2.erode(...)
+            m = m             # TODO: cv2.dilate(...)
+            cv2.erode(m, kernel, m, iterations=self.erode_iterations)
+            cv2.dilate(m, kernel, m, iterations=self.dilate_iterations)
+            return m
+
+        clean_white  = clean(mask_white)
+        clean_yellow = clean(mask_yellow)
+        clean_red    = clean(mask_red)
 
         # TODO (Part III): Find edges once, not once per color.
-        edges = None
+
+        CANNY_LOW = 60
+        CANNY_HIGH = 120
+        blurred = cv2.GaussianBlur(cropped, (5, 5), 0)
+        edges = cv2.Canny(blurred, CANNY_LOW, CANNY_HIGH, apertureSize=3)
+        
+        masks = {
+            "WHITE": clean_white,
+            "YELLOW": clean_yellow,
+            "RED": clean_red
+        }
 
         detections = {}
         for name, mask in masks.items():
@@ -200,7 +246,7 @@ class LaneDetectorNode:
         #   the WHOLE frame, so undo the crop (self.cutoff_rows) before dividing
         #   by the resized size (self.img_w, self.img_h). Which height you
         #   divide by matters, and getting it wrong does not raise an error.
-        pass
+        
 
     # ----------------------------------------------------------------------
     # Provided from here down. Read it, but you should not need to edit it.
