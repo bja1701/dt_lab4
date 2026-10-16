@@ -222,7 +222,32 @@ class LaneDetectorNode:
             # cv2.HoughLinesP on the result, using THIS color's parameters -
             # self.colors[name].hough_threshold, .hough_min_line_length and
             # .hough_max_line_gap. Handle a None return, and reshape to (-1, 4).
-            lines = np.zeros((0, 4), dtype=int)
+
+
+            """
+            white_edges = cv2.bitwise_and(clean_white, edges)  # TODO use cv2.bitwise_and to combine the clean white mask with the edges
+            yellow_edges = cv2.bitwise_and(clean_yellow, edges);
+            red_edges = cv2.bitwise_and(clean_red, edges);
+
+            white_lines = cv2.HoughLinesP(white_edges, rho=1, theta=np.pi / 180, threshold=4, minLineLength=3, maxLineGap=3);
+            yellow_lines = cv2.HoughLinesP(yellow_edges, rho=1, theta=np.pi / 180, threshold=4, minLineLength=3, maxLineGap=3);
+            red_lines = cv2.HoughLinesP(red_edges, rho=1, theta=np.pi / 180, threshold=4, minLineLength=3, maxLineGap=3);
+            """
+            color_edges = cv2.bitwise_and(mask, edges);
+
+            lines = cv2.HoughLinesP(
+                color_edges,
+                rho=1,
+                theta=np.pi / 180,
+                threshold=self.colors[name].hough_threshold,
+                minLineLength=self.colors[name].hough_min_line_length,
+                maxLineGap=self.colors[name].hough_max_line_gap
+            );
+
+            if lines is None:
+                lines = np.empty((0, 4), dtype = int);
+            else:
+                lines = lines.reshape(-1, 4);
 
             normals = self._orient(lines, mask)
             detections[name] = (lines, normals)
@@ -242,8 +267,9 @@ class LaneDetectorNode:
         a message ground projection should receive.
         """
         # TODO (Part III): build one SegmentList and publish it on self.pub_segments.
-        #
+        segmentList = SegmentList();
         # * Copy only header.stamp onto the list, not the whole header.
+        segmentList.header.stamp = header.stamp
         # * detections maps color name -> (lines, normals): lines is Nx4
         #   (x1, y1, x2, y2) in CROPPED-image pixels, normals is Nx2.
         # * One Segment per line. `rosmsg show duckietown_msgs/Segment` lists
@@ -253,8 +279,55 @@ class LaneDetectorNode:
         #   the WHOLE frame, so undo the crop (self.cutoff_rows) before dividing
         #   by the resized size (self.img_w, self.img_h). Which height you
         #   divide by matters, and getting it wrong does not raise an error.
-        
 
+        """
+            {
+                "WHITE":  (white_lines, white_normals),
+                "YELLOW": (yellow_lines, yellow_normals),
+                "RED":    (red_lines, red_normals)
+            }
+        """
+        for name, (lines, normals) in detections.items():
+            """
+                每個 color 裡
+                ↓
+                每一條 line
+                ↓
+                建立一個 Segment
+                ↓
+                填 color
+                ↓
+                填兩個 normalized points
+                ↓
+                填 normal
+                ↓
+                append 到 segmentList.segments
+            """
+            for i in range(len(lines)):
+                line = lines[i]
+                normal = normals[i]
+
+                x1, y1, x2, y2 = line
+
+                segment = Segment();
+
+                segment.color = SEGMENT_COLOR_IDS[name];
+                # 如果原始圖片是 640, 而 x1 = 320，這樣 x_normalized = 320 / 640 = 0.5
+                # 也就是說這個點在圖片寬度的 50% 位置，也就是中間
+                # normalized x => 0.0 = 最左邊, 0.5 = 中間, 1.0 = 最右邊
+                segment.pixels_normalized[0].x = x1 / self.img_w;
+                segment.pixels_normalized[0].y = (y1 + self.cutoff_rows) / self.img_h;
+
+                # y 先補回 crop，再除 height (Restore y first, then normalize it. [0, 1])
+                segment.pixels_normalized[1].x = x2 / self.img_w;
+                segment.pixels_normalized[1].y = (y2 + self.cutoff_rows) / self.img_h;
+
+                segment.normal.x = normal[0];
+                segment.normal.y = normal[1];
+
+            segmentList.segments.append(segment);
+
+        self.pub_segments.publish(segmentList);
     # ----------------------------------------------------------------------
     # Provided from here down. Read it, but you should not need to edit it.
     # ----------------------------------------------------------------------
