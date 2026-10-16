@@ -203,11 +203,12 @@ class LaneDetectorNode:
         clean_red    = clean(mask_red)
 
         # TODO (Part III): Find edges once, not once per color.
-
-        CANNY_LOW = 60
-        CANNY_HIGH = 120
+        # self.canny_thresholds = rospy.get_param("~canny_thresholds")
+        # self.canny_aperture_size = int(rospy.get_param("~canny_aperture_size", 3))
+        CANNY_LOW = self.canny_thresholds[0];
+        CANNY_HIGH = self.canny_thresholds[1];
         blurred = cv2.GaussianBlur(cropped, (5, 5), 0)
-        edges = cv2.Canny(blurred, CANNY_LOW, CANNY_HIGH, apertureSize=3)
+        edges = cv2.Canny(blurred, CANNY_LOW, CANNY_HIGH, apertureSize = self.canny_aperture_size);
         
         masks = {
             "WHITE": clean_white,
