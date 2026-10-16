@@ -346,7 +346,7 @@ class LaneDetectorNode:
                 segment.normal.x = normal[0];
                 segment.normal.y = normal[1];
 
-            segmentList.segments.append(segment);
+                segmentList.segments.append(segment);
 
         self.pub_segments.publish(segmentList);
     # ----------------------------------------------------------------------
