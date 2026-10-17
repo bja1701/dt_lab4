@@ -14,6 +14,20 @@ dt-launchfile-init
 #     dts devel run   -H DUCKIEBOT_NAME -L lane_following
 #
 # No -X here - the robot has no display. Open the debug views from `dts gui`.
+echo "=== DEBUG ==="
+echo "ROS_PACKAGE_PATH=$ROS_PACKAGE_PATH"
+
+echo "=== CATKIN SETUP ==="
+ls -l /code/devel/setup.bash || true
+
+echo "=== PACKAGE ==="
+rospack find lane_detection || true
+
+echo "=== LAUNCH FILE ==="
+ls -l /code/src/lane-following/packages/lane_detection/launch/ || true
+
+echo "=== END DEBUG ==="
+
 dt-exec roslaunch lane_detection lane_following.launch
 
 # ----------------------------------------------------------------------------
