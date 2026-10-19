@@ -22,7 +22,7 @@ colors:
 
 dilation_kernel_size: 3
 erode_iterations: 1
-dilate_iterations: 2
+dilate_iterations: 3
 
 canny_thresholds: [80, 160]
 canny_aperture_size: 3
