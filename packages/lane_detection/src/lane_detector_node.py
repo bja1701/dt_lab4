@@ -71,7 +71,10 @@ class ColorRange:
         """The binary mask of every pixel of this color."""
         # TODO (Part II): cv2.inRange for each (low, high) in self.bounds,
         # combined with cv2.bitwise_or.
-        raise NotImplementedError("ColorRange.mask")
+        out = cv2.inRange(hsv, self.bounds[0][0], self.bounds[0][1])
+        for low, high in self.bounds[1:]:
+            out = cv2.bitwise_or(out, cv2.inRange(hsv, low, high))
+        return out
 
 
 class LaneDetectorNode:
@@ -81,7 +84,7 @@ class LaneDetectorNode:
         self.bridge = CvBridge()
 
         # TODO (Part II): segment publisher
-        self.pub_segments = rospy.Publisher("~segments", SegmentList, queue_size=1)
+        self.pub_segments = rospy.Publisher("~segment_list", SegmentList, queue_size=1)
 
         # Debug views, rendered only when something is subscribed.
         self.pub_cropped = rospy.Publisher("~image_cropped", Image, queue_size=1)
@@ -97,7 +100,7 @@ class LaneDetectorNode:
         self.pub_lines_all = rospy.Publisher("~image_lines_all", Image, queue_size=1)
 
         # TODO (Part II): image subscriber
-        self.sub_image = rospy.Subscriber(self.image_topic, CompressedImage, self.image_cb, queue_size=1)
+        self.sub_image = rospy.Subscriber(self.image_topic, CompressedImage, self.image_cb, queue_size=1, buff_size=2**24)
 
         # TODO (Part II): a rospy.Timer that re-runs get_params every 10 s
         rospy.Timer(rospy.Duration(10), self.get_params)
@@ -155,59 +158,32 @@ class LaneDetectorNode:
         img_size = (self.img_w, self.img_h)
         original_size = bgr.shape[1], bgr.shape[0]
         if original_size != img_size:
-            print(f"resizing {original_size} -> {img_size}")
+            # print(f"resizing {original_size} -> {img_size}")
             small = cv2.resize(bgr, img_size, interpolation=cv2.INTER_AREA)
         else:
             small = bgr
 
         # Crop
-        CUTOFF_ROWS = int(self.top_cutoff * small.shape[0])
-        cropped = small[CUTOFF_ROWS:]
+        # CUTOFF_ROWS = int(self.top_cutoff * small.shape[0])
+        cropped = small[self.cutoff_rows:]
 
         # TODO (Part II): BGR to HSV.
         hsv = cv2.cvtColor(cropped, cv2.COLOR_BGR2HSV)
 
 
         # TODO (Part II): a cleaned mask per color. self.colors maps name ->
-        # ColorRange; erode then dilate with self.kernel and the iteration
-        # counts from the param file. The dilation is what makes the mask reach
-        # the Canny edges on its boundary.
-        
-        mask_red_1 = cv2.inRange(hsv, self.colors["RED"].low_1, self.colors["RED"].high_1)
-        mask_red_2 = cv2.inRange(hsv, self.colors["RED"].low_2, self.colors["RED"].high_2)
-
-        mask_white  = cv2.inRange(hsv, self.colors["WHITE"].low,  self.colors["WHITE"].high)
-        mask_yellow = cv2.inRange(hsv, self.colors["YELLOW"].low, self.colors["YELLOW"].high)
-        mask_red    = cv2.bitwise_or(mask_red_1, mask_red_2)
-
-        kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (self.dilation_kernel_size, self.dilation_kernel_size))
-
-        def clean(mask):
-            # TODO: erode to drop speckle, then dilate. Remember the second reason for
-            # the dilation - the mask has to reach out over the Canny edges you find in
-            # section 6.
-            m = mask          # TODO: cv2.erode(...)
-            m = m             # TODO: cv2.dilate(...)
-            cv2.erode(m, kernel, m, iterations=self.erode_iterations)
-            cv2.dilate(m, kernel, m, iterations=self.dilate_iterations)
-            return m
-
-        clean_white  = clean(mask_white)
-        clean_yellow = clean(mask_yellow)
-        clean_red    = clean(mask_red)
-
         # TODO (Part III): Find edges once, not once per color.
 
-        CANNY_LOW = 60
-        CANNY_HIGH = 120
+        masks = {}
+        for name, color in self.colors.items():
+            m = color.mask(hsv)
+            m = cv2.erode(m, self.kernel, iterations=self.erode_iterations)
+            m = cv2.dilate(m, self.kernel, iterations=self.dilate_iterations)
+            masks[name] = m
+
         blurred = cv2.GaussianBlur(cropped, (5, 5), 0)
-        edges = cv2.Canny(blurred, CANNY_LOW, CANNY_HIGH, apertureSize=3)
-        
-        masks = {
-            "WHITE": clean_white,
-            "YELLOW": clean_yellow,
-            "RED": clean_red
-        }
+        edges = cv2.Canny(blurred, self.canny_thresholds[0], self.canny_thresholds[1],
+                        apertureSize=self.canny_aperture_size)
 
         detections = {}
         for name, mask in masks.items():
@@ -215,15 +191,21 @@ class LaneDetectorNode:
             # cv2.HoughLinesP on the result, using THIS color's parameters -
             # self.colors[name].hough_threshold, .hough_min_line_length and
             # .hough_max_line_gap. Handle a None return, and reshape to (-1, 4).
-            lines = np.zeros((0, 4), dtype=int)
+            # lines = np.zeros((0, 4), dtype=int)
+            color = self.colors[name]
+            found = cv2.HoughLinesP(cv2.bitwise_and(mask, edges), rho=1, theta=np.pi / 180,
+                                    threshold=color.hough_threshold,
+                                    minLineLength=color.hough_min_line_length,
+                                    maxLineGap=color.hough_max_line_gap)
+            lines = np.zeros((0, 4), dtype=int) if found is None else found.reshape(-1, 4)
 
             normals = self._orient(lines, mask)
             detections[name] = (lines, normals)
 
-        if cropped is None:
-            rospy.logwarn_once(
-                "image_cb is not doing anything yet - frames are arriving but "
-                "the TODOs above are unfilled, so there is nothing to publish.")
+        # if cropped is None:
+        #     rospy.logwarn_once(
+        #         "image_cb is not doing anything yet - frames are arriving but "
+        #         "the TODOs above are unfilled, so there is nothing to publish.")
 
         self._publish_segments(msg.header, detections)
         self._publish_debug(msg.header, cropped, edges, masks, detections)
@@ -246,6 +228,30 @@ class LaneDetectorNode:
         #   the WHOLE frame, so undo the crop (self.cutoff_rows) before dividing
         #   by the resized size (self.img_w, self.img_h). Which height you
         #   divide by matters, and getting it wrong does not raise an error.
+
+        seg_list = SegmentList()
+        seg_list.header.stamp = header.stamp
+
+        for name in detections:
+            lines, normals = detections[name]
+
+            for i in range(len(lines)):
+                x1, y1, x2, y2 = lines[i]
+
+                seg = Segment()
+                seg.color = SEGMENT_COLOR_IDS[name]
+
+                seg.pixels_normalized[0].x = float(x1) / self.img_w
+                seg.pixels_normalized[0].y = float(y1 + self.cutoff_rows) / self.img_h
+                seg.pixels_normalized[1].x = float(x2) / self.img_w
+                seg.pixels_normalized[1].y = float(y2 + self.cutoff_rows) / self.img_h
+
+                seg.normal.x = float(normals[i][0])
+                seg.normal.y = float(normals[i][1])
+
+                seg_list.segments.append(seg)
+
+        self.pub_segments.publish(seg_list)
         
 
     # ----------------------------------------------------------------------

@@ -1,0 +1,43 @@
+# ECEN 433 - Lab 4
+#
+# Detector configuration for TEST mode - the saved images replayed by
+# camera_sim. Loaded by lane_detection.launch when test:=true.
+#
+# Your robot gets its own param file in Part V. The two files have the same
+# keys and different numbers, which is the whole point: the node never changes.
+
+image_topic: "camera_node/image/compressed"
+ 
+img_size: [640, 480]
+top_cutoff: 0.45       
+
+colors:
+  WHITE:
+    low:  [90, 10, 150]
+    high: [130, 110, 255]
+ 
+  YELLOW:
+    low:  [15, 50, 100]
+    high: [45, 255, 255]
+ 
+  RED:
+    low_1:  [150, 50, 100]
+    high_1: [179, 200, 255]
+    low_2:  [0, 0, 0]
+    high_2: [10, 20, 60]
+ 
+dilation_kernel_size: 3
+erode_iterations: 2
+dilate_iterations: 4     # allow mask to reach canny edges
+ 
+canny_thresholds: [60, 120]
+canny_aperture_size: 3
+hough:
+  threshold: 15
+  min_line_length: 15
+  max_line_gap: 8
+ 
+normal_probe_px: 2
+
+# Leave this false.
+fake_lane_filter_switch: false
