@@ -1,15 +1,13 @@
 # ECEN 433 - Lab 4
 #
-# Detector configuration for TEST mode - the saved images replayed by
-# camera_sim. Loaded by lane_detection.launch when test:=true.
-#
-# Your robot gets its own param file in Part V. The two files have the same
-# keys and different numbers, which is the whole point: the node never changes.
+# Detector configuration for gru (the real robot). Loaded by
+# lane_following.launch. Test mode (camera_sim) uses lane_detection_test.yaml.
 
 image_topic: "camera_node/image/compressed"
  
-img_size: [640, 480]
-top_cutoff: 0.65       
+img_size: [320, 240]   # half res to save CPU (was 640x480)
+process_every: 2       # use every 2nd camera frame (30 Hz -> 15 Hz)
+top_cutoff: 0.45       # was 0.65 to dodge CPU overload; 0.45 sees tight inside turns sooner
 
 colors:
   WHITE:
@@ -29,15 +27,15 @@ colors:
     high_2: [10, 20, 60]
  
 dilation_kernel_size: 3
-erode_iterations: 2
-dilate_iterations: 4     # allow mask to reach canny edges
+erode_iterations: 1      # halved with the image size (was 2)
+dilate_iterations: 2     # allow mask to reach canny edges (was 4 at 640x480)
  
 canny_thresholds: [60, 120]
 canny_aperture_size: 3
 hough:
   threshold: 15
-  min_line_length: 15
-  max_line_gap: 8
+  min_line_length: 8   # pixels, halved with the image (was 15)
+  max_line_gap: 4      # (was 8)
  
 normal_probe_px: 2
 

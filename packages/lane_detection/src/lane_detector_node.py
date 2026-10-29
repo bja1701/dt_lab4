@@ -80,6 +80,7 @@ class ColorRange:
 class LaneDetectorNode:
     def __init__(self):
         rospy.init_node("lane_detector_node")
+        self.frame_count = 0
         self.get_params(event=None)
         self.bridge = CvBridge()
 
@@ -128,6 +129,7 @@ class LaneDetectorNode:
         self.canny_thresholds = rospy.get_param("~canny_thresholds")
         self.canny_aperture_size = int(rospy.get_param("~canny_aperture_size", 3))
         self.normal_probe_px = int(rospy.get_param("~normal_probe_px", 2))
+        self.process_every = max(1, int(rospy.get_param("~process_every", 1)))
 
         # Computed variables from parameters.
         self.img_w, self.img_h = int(img_size[0]), int(img_size[1])
@@ -145,10 +147,18 @@ class LaneDetectorNode:
 
     def image_cb(self, msg):
         """Called for every frame. Keep it fast - this runs 20-30 times a second."""
-        try:
-            bgr = self.bridge.compressed_imgmsg_to_cv2(msg, "bgr8")
-        except Exception as e:
-            rospy.logerr("could not decode image: %s", e)
+        # Only do every Nth frame. The lane filter can't use 30 Hz anyway, and
+        # this was overloading the CPU.
+        self.frame_count += 1
+        if self.frame_count % self.process_every != 0:
+            return
+
+        # If we want half size (or less), let the JPEG decoder do it - much
+        # cheaper than decoding 640x480 and then resizing.
+        flag = cv2.IMREAD_REDUCED_COLOR_2 if self.img_w <= 320 else cv2.IMREAD_COLOR
+        bgr = cv2.imdecode(np.frombuffer(msg.data, np.uint8), flag)
+        if bgr is None:
+            rospy.logerr("could not decode image")
             return
 
         # TODO (Part II): resize to (self.img_w, self.img_h), THEN slice off

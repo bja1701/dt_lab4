@@ -28,7 +28,7 @@
     <arg name="veh" value="$(arg veh)"/>
     <arg name="demo_name" value="lane_following"/>
     <arg name="param_file_name" value="default"/>
-    <arg name="visualization" value="true"/>
+    <arg name="visualization" value="false"/>  <!-- visualizers cost CPU; turn on only to debug -->
 
     <!-- Camera -->
     <arg name="/camera/raw" value="false"/>
