@@ -2,12 +2,12 @@
 
 image_topic: "camera_node/image/compressed"
 
-img_size: [640, 480]
-top_cutoff: 0.45
+img_size: [480, 640]
+top_cutoff: 0.5
 
 colors:
   WHITE:
-    low:  [0, 0, 130]
+    low:  [0, 0, 80]
     high: [179, 40, 255]
 
   YELLOW:
