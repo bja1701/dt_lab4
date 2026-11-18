@@ -56,7 +56,7 @@
   <group ns="$(arg veh)">
 
     <!-- Roxanne needs fewer red segments to recognize a stop line -->
-    <param name="stop_line_filter_node/min_segs" value="3"/>
+    <param name="stop_line_filter_node/min_segs" value="4"/>
 
     <node pkg="lane_detection" type="lane_detector_node.py" name="line_detector_node"
           output="screen">
